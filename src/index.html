@@ -194,9 +194,11 @@
           body: formData
         });
 
-        if (!response.ok) {
-          throw new Error("Erreur lors de l’envoi du dossier");
-        }
+if (!response.ok) {
+  const txt = await response.text().catch(() => "");
+  throw new Error(`HTTP ${response.status} - ${txt || "Erreur serveur"}`);
+}
+
 
         window.location.href = "/merci.html";
 
