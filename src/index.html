@@ -1,11 +1,211 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8">
-  <title>Onboarding véhicule</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Préparation dossier véhicule</title>
+
+  <style>
+    body{
+      font-family: Arial, sans-serif;
+      margin:0;
+      background:#0f0f12;
+      color:#fff;
+    }
+
+    .wrap{
+      max-width:720px;
+      margin:0 auto;
+      padding:18px;
+    }
+
+    .logo{
+      display:flex;
+      justify-content:center;
+      margin:20px 0 10px;
+    }
+
+    .logo img{
+      max-width:260px;
+      width:min(70%,260px);
+      height:auto;
+    }
+
+    .card{
+      background:#17181d;
+      border:1px solid #2a2b33;
+      border-radius:14px;
+      padding:16px;
+      margin:12px 0;
+    }
+
+    h1{
+      font-size:20px;
+      margin:6px 0 10px;
+    }
+
+    label{
+      display:block;
+      margin:10px 0 6px;
+      font-size:14px;
+      opacity:.9;
+    }
+
+    input, textarea, button{
+      width:100%;
+      padding:12px;
+      border-radius:12px;
+      border:1px solid #2a2b33;
+      background:#0f0f12;
+      color:#fff;
+      box-sizing:border-box;
+    }
+
+    textarea{
+      resize:vertical;
+      min-height:80px;
+    }
+
+    input[type="file"]{
+      padding:10px;
+    }
+
+    .hint{
+      font-size:12px;
+      opacity:.75;
+      margin-top:6px;
+      line-height:1.35;
+    }
+
+    .row{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+    }
+
+    @media (max-width:640px){
+      .row{ grid-template-columns:1fr; }
+    }
+
+    button{
+      cursor:pointer;
+      border:none;
+      background:#3b82f6;
+      font-weight:700;
+      margin-top:10px;
+    }
+
+    button:disabled{
+      opacity:.6;
+      cursor:not-allowed;
+    }
+  </style>
 </head>
-<body style="font-family:Arial; padding:40px;">
-  <h1>🚗 Onboarding véhicule</h1>
-  <p>Le site Azure Static Web Apps fonctionne ✅</p>
+
+<body>
+  <div class="wrap">
+
+    <!-- LOGO -->
+    <div class="logo">
+      <img src="/assets/logo-bernier-blanc.png" alt="Groupe Bernier">
+    </div>
+
+    <!-- TITRE -->
+    <div class="card">
+      <h1>Préparation de votre dossier atelier</h1>
+      <div class="hint">
+        Merci de compléter ce formulaire et d’envoyer :
+        <b>1 photo de la carte grise</b> et, si besoin,
+        <b>des photos des dégâts</b>.
+      </div>
+    </div>
+
+    <!-- FORMULAIRE -->
+    <form id="onboardingForm" class="card" enctype="multipart/form-data">
+
+      <label for="nom">Nom / Prénom *</label>
+      <input id="nom" name="nom" required>
+
+      <label for="email">Adresse e-mail *</label>
+      <input id="email" name="email" type="email" required>
+
+      <label for="telephone">Téléphone *</label>
+      <input id="telephone" name="telephone" type="tel" required>
+
+      <label for="adresse">Adresse postale *</label>
+      <textarea id="adresse" name="adresse_postale" required></textarea>
+
+      <label for="immat">Immatriculation (si connue)</label>
+      <input id="immat" name="immatriculation" placeholder="AA-123-BB">
+
+      <label for="cg">Photo de la carte grise *</label>
+      <input id="cg"
+             name="carte_grise"
+             type="file"
+             accept="image/*"
+             capture="environment"
+             required>
+
+      <div class="hint">Merci de prendre une photo nette et lisible.</div>
+
+      <label>Photos des dégâts (si concernés)</label>
+      <input name="degat_1" type="file" accept="image/*" capture="environment">
+      <input name="degat_2" type="file" accept="image/*" capture="environment">
+      <input name="degat_3" type="file" accept="image/*" capture="environment">
+      <input name="degat_4" type="file" accept="image/*" capture="environment">
+      <input name="degat_5" type="file" accept="image/*" capture="environment">
+      <input name="degat_6" type="file" accept="image/*" capture="environment">
+
+      <div class="hint">
+        Astuce : privilégiez le Wi-Fi ou un bon réseau mobile.
+      </div>
+
+      <button id="btn" type="submit">Envoyer mon dossier</button>
+      <div id="msg" class="hint"></div>
+    </form>
+
+    <!-- RGPD -->
+    <div class="card">
+      <div class="hint">
+        Les informations et photos transmises sont utilisées uniquement
+        pour la prise en charge de votre véhicule et conservées conformément
+        à la réglementation en vigueur.
+      </div>
+    </div>
+
+  </div>
+
+  <!-- JS ENVOI VERS AZURE FUNCTION -->
+  <script>
+    const form = document.getElementById("onboardingForm");
+    const btn = document.getElementById("btn");
+    const msg = document.getElementById("msg");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      btn.disabled = true;
+      msg.textContent = "Envoi en cours… merci de patienter.";
+
+      try {
+        const formData = new FormData(form);
+
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          body: formData
+        });
+
+        if (!response.ok) {
+          throw new Error("Erreur lors de l’envoi du dossier");
+        }
+
+        window.location.href = "/merci.html";
+
+      } catch (err) {
+        btn.disabled = false;
+        msg.textContent = "Erreur : " + err.message;
+      }
+    });
+  </script>
+
 </body>
 </html>
