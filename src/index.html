@@ -178,7 +178,7 @@
       try {
         const formData = new FormData(form);
 
-        const response = await fetch("/api/sendmail", {
+        const response = await fetch("/api/upload", {
           method: "POST",
           body: formData
         });
