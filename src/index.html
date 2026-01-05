@@ -19,6 +19,7 @@
       padding:18px;
     }
 
+    /* LOGO */
     .logo{
       display:flex;
       justify-content:center;
@@ -77,12 +78,22 @@
       line-height:1.35;
     }
 
+    .row{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+    }
+
+    @media (max-width:640px){
+      .row{ grid-template-columns:1fr; }
+    }
+
     button{
       cursor:pointer;
       border:none;
       background:#3b82f6;
       font-weight:700;
-      margin-top:12px;
+      margin-top:10px;
     }
 
     button:disabled{
@@ -104,67 +115,84 @@
     <div class="card">
       <h1>Préparation de votre dossier atelier</h1>
       <div class="hint">
-        Merci de compléter ce formulaire et de joindre :
-        <b>1 photo de la carte grise</b> et, si nécessaire,
-        <b>des photos des dégâts</b>.
+        Merci d’envoyer :
+        <b>1 photo de la carte grise</b> +
+        <b>des photos des dégâts du véhicule</b>.<br>
+        Astuce : photos nettes, véhicule bien éclairé.
       </div>
     </div>
 
-    <!-- FORMULAIRE -->
+    <!-- FORMULAIRE (Azure) -->
     <form id="onboardingForm" class="card" enctype="multipart/form-data">
 
-      <label for="nom">Nom / Prénom *</label>
-      <input id="nom" name="nom" required>
+      <!-- DATE EXPERTISE -->
+      <label for="date_expertise">
+        Date de votre RDV d'expertise confirmé avec votre assurance et / ou le cabinet d'expertise *
+      </label>
+      <input id="date_expertise" name="date_expertise" type="date" required>
+      <div class="hint">Sélectionnez la date de rendez-vous.</div>
 
+      <div class="row">
+        <div>
+          <label for="nom">Nom / Prénom *</label>
+          <input id="nom" name="nom" type="text" required>
+        </div>
+        <div>
+          <label for="tel">Téléphone *</label>
+          <input id="tel" name="telephone" type="tel" required>
+        </div>
+      </div>
+
+      <!-- EMAIL -->
       <label for="email">Adresse e-mail *</label>
-      <input id="email" name="email" type="email" required>
+      <input id="email" name="email" type="email" placeholder="exemple@email.fr" required>
 
-      <label for="telephone">Téléphone *</label>
-      <input id="telephone" name="telephone" type="tel" required>
+      <!-- ADRESSE POSTALE -->
+      <label for="adresse">Adresse postale complète *</label>
+      <textarea id="adresse" name="adresse_postale" placeholder="N° et rue, code postal, ville" required></textarea>
 
-      <label for="adresse">Adresse postale *</label>
-      <textarea id="adresse" name="adresse_postale" required></textarea>
+      <label for="immat">Immatriculation (optionnel)</label>
+      <input id="immat" name="immatriculation" type="text" placeholder="AA-123-BB">
 
-      <label for="immat">Immatriculation (si connue)</label>
-      <input id="immat" name="immatriculation" placeholder="AA-123-BB">
-
+      <!-- CARTE GRISE -->
       <label for="cg">Photo de la carte grise *</label>
-      <input id="cg"
-             name="carte_grise"
-             type="file"
-             accept="image/*"
-             capture="environment"
-             required>
+      <input id="cg" name="carte_grise" type="file" accept="image/*" capture="environment" required>
+      <div class="hint">1 photo uniquement.</div>
 
-      <div class="hint">Photo nette et lisible, s’il vous plaît.</div>
-
-      <label>Photos des dégâts (si concernés)</label>
+      <!-- DEGATS (4 photos) -->
+      <label>Si RDV carrosserie – Photos des dégâts (jusqu’à 4)</label>
       <input name="degat_1" type="file" accept="image/*" capture="environment">
       <input name="degat_2" type="file" accept="image/*" capture="environment">
       <input name="degat_3" type="file" accept="image/*" capture="environment">
       <input name="degat_4" type="file" accept="image/*" capture="environment">
-      <input name="degat_5" type="file" accept="image/*" capture="environment">
-      <input name="degat_6" type="file" accept="image/*" capture="environment">
+
+      <!-- HORS SINISTRE (2 photos) -->
+      <label>
+        Souhaitez-vous un devis pour dégâts en dehors du sinistre ? Une remise de 50% sera appliquée car votre véhicule passera dans tous les cas en peinture
+      </label>
+      <div class="hint">Optionnel : ajoutez jusqu’à 2 photos.</div>
+      <input name="hors_sinistre_1" type="file" accept="image/*" capture="environment">
+      <input name="hors_sinistre_2" type="file" accept="image/*" capture="environment">
 
       <div class="hint">
-        Astuce : privilégiez le Wi-Fi ou un bon réseau mobile.
+        Taille maximale conseillée : photos légères (réseau mobile).
       </div>
 
-      <button id="btn" type="submit">Envoyer mon dossier</button>
-      <div id="msg" class="hint"></div>
+      <button id="btn" type="submit">Envoyer les photos</button>
+      <div id="msg" class="hint" style="margin-top:8px;"></div>
     </form>
 
     <!-- RGPD -->
     <div class="card">
       <div class="hint">
-        Les informations et documents transmis sont utilisés uniquement
-        pour la prise en charge de votre véhicule.
+        Les données et photos transmises sont utilisées uniquement
+        dans le cadre de la prise en charge de votre véhicule
+        et conservées conformément à la réglementation en vigueur.
       </div>
     </div>
 
   </div>
 
-  <!-- SCRIPT -->
   <script>
     const form = document.getElementById("onboardingForm");
     const btn = document.getElementById("btn");
@@ -173,11 +201,12 @@
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       btn.disabled = true;
-      msg.textContent = "Envoi du dossier en cours… merci de patienter.";
+      msg.textContent = "Envoi en cours… merci de patienter.";
 
       try {
         const formData = new FormData(form);
 
+        // ⚠️ IMPORTANT : adapte si ta function s’appelle sendmail
         const response = await fetch("/api/upload", {
           method: "POST",
           body: formData
@@ -189,7 +218,6 @@
         }
 
         window.location.href = "/merci.html";
-
       } catch (err) {
         btn.disabled = false;
         msg.textContent = "Erreur : " + err.message;

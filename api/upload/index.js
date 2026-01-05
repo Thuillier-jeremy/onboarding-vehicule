@@ -14,28 +14,43 @@ function parseMultipart(req) {
     busboy.on("file", (name, file, info) => {
       const { filename, mimeType } = info;
       const chunks = [];
+
       file.on("data", (d) => chunks.push(d));
       file.on("end", () => {
+        const buffer = Buffer.concat(chunks);
+
+        // Ignore les "fichiers vides" (champ laissé vide côté client)
+        if (!buffer || buffer.length === 0) return;
+
         files.push({
           field: name,
           filename: filename || `${name}.bin`,
           contentType: mimeType || "application/octet-stream",
-          buffer: Buffer.concat(chunks),
+          buffer,
         });
       });
     });
 
     busboy.on("finish", () => resolve({ fields, files }));
     busboy.on("error", reject);
+
     busboy.end(req.body);
   });
+}
+
+function fmtDateFR(isoDate) {
+  // attend "YYYY-MM-DD" (input type=date)
+  if (!isoDate) return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
+  if (!m) return isoDate;
+  return `${m[3]}/${m[2]}/${m[1]}`;
 }
 
 module.exports = async function (context, req) {
   try {
     const SMTP_USER = process.env.SMTP_USER;
     const SMTP_PASS = process.env.SMTP_PASS;
-    const MAIL_TO   = process.env.MAIL_TO;   // destinataire (ex: boite onboarding)
+    const MAIL_TO   = process.env.MAIL_TO;
     const MAIL_CC   = process.env.MAIL_CC || "";
 
     if (!SMTP_USER || !SMTP_PASS || !MAIL_TO) {
@@ -45,7 +60,7 @@ module.exports = async function (context, req) {
 
     const { fields, files } = await parseMultipart(req);
 
-    // limite totale (évite erreurs O365 sur pièces jointes)
+    // Limite totale (évite erreurs O365 sur pièces jointes)
     const totalBytes = files.reduce((s, f) => s + f.buffer.length, 0);
     const maxTotal = 18 * 1024 * 1024; // ~18 MB
     if (totalBytes > maxTotal) {
@@ -53,6 +68,8 @@ module.exports = async function (context, req) {
       return;
     }
 
+    // Champs (version Netlify-like)
+    const date_expertise = (fields.date_expertise || "").trim(); // "YYYY-MM-DD"
     const nom = (fields.nom || "").trim();
     const email = (fields.email || "").trim();
     const telephone = (fields.telephone || "").trim();
@@ -61,16 +78,33 @@ module.exports = async function (context, req) {
 
     const subject = `[ONBOARDING] ${nom || "Client"}${immat ? " - " + immat : ""}`;
 
+    // Comptage des photos par catégorie
+    const countByPrefix = (prefix) =>
+      files.filter(f => (f.field || "").startsWith(prefix)).length;
+
+    const nbCarteGrise = files.filter(f => f.field === "carte_grise").length;
+    const nbDegats = countByPrefix("degat_");
+    const nbHorsSinistre = countByPrefix("hors_sinistre_");
+    const totalFiles = files.length;
+
     const bodyText =
 `Nouveau dossier onboarding
 
-Nom: ${nom}
-Email: ${email}
-Téléphone: ${telephone}
-Adresse: ${adresse}
-Immatriculation: ${immat}
+Date RDV expertise : ${fmtDateFR(date_expertise) || "(non renseignée)"}
 
-Date: ${new Date().toISOString()}
+Nom              : ${nom}
+Email            : ${email}
+Téléphone        : ${telephone}
+Adresse          : ${adresse}
+Immatriculation  : ${immat || "(non renseignée)"}
+
+Pièces jointes :
+- Carte grise        : ${nbCarteGrise}
+- Dégâts (degat_*)   : ${nbDegats}
+- Hors sinistre      : ${nbHorsSinistre}
+- Total              : ${totalFiles}
+
+Date de soumission : ${new Date().toISOString()}
 `;
 
     const transporter = nodemailer.createTransport({
