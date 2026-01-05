@@ -77,22 +77,12 @@
       line-height:1.35;
     }
 
-    .row{
-      display:grid;
-      grid-template-columns:1fr 1fr;
-      gap:10px;
-    }
-
-    @media (max-width:640px){
-      .row{ grid-template-columns:1fr; }
-    }
-
     button{
       cursor:pointer;
       border:none;
       background:#3b82f6;
       font-weight:700;
-      margin-top:10px;
+      margin-top:12px;
     }
 
     button:disabled{
@@ -114,8 +104,8 @@
     <div class="card">
       <h1>Préparation de votre dossier atelier</h1>
       <div class="hint">
-        Merci de compléter ce formulaire et d’envoyer :
-        <b>1 photo de la carte grise</b> et, si besoin,
+        Merci de compléter ce formulaire et de joindre :
+        <b>1 photo de la carte grise</b> et, si nécessaire,
         <b>des photos des dégâts</b>.
       </div>
     </div>
@@ -146,7 +136,7 @@
              capture="environment"
              required>
 
-      <div class="hint">Merci de prendre une photo nette et lisible.</div>
+      <div class="hint">Photo nette et lisible, s’il vous plaît.</div>
 
       <label>Photos des dégâts (si concernés)</label>
       <input name="degat_1" type="file" accept="image/*" capture="environment">
@@ -167,120 +157,45 @@
     <!-- RGPD -->
     <div class="card">
       <div class="hint">
-        Les informations et photos transmises sont utilisées uniquement
-        pour la prise en charge de votre véhicule et conservées conformément
-        à la réglementation en vigueur.
+        Les informations et documents transmis sont utilisés uniquement
+        pour la prise en charge de votre véhicule.
       </div>
     </div>
 
   </div>
 
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <!-- SCRIPT -->
+  <script>
+    const form = document.getElementById("onboardingForm");
+    const btn = document.getElementById("btn");
+    const msg = document.getElementById("msg");
 
-  <!-- JS ENVOI VERS AZURE FUNCTION -->
- <script>
-  const form = document.getElementById("onboardingForm");
-  const btn = document.getElementById("btn");
-  const msg = document.getElementById("msg");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      btn.disabled = true;
+      msg.textContent = "Envoi du dossier en cours… merci de patienter.";
 
-  // 🔁 Convertit un File en ArrayBuffer (pour ZIP)
-  function fileToArrayBuffer(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsArrayBuffer(file);
-    });
-  }
+      try {
+        const formData = new FormData(form);
 
-  // Nettoyage léger pour nom de fichier
-  function safe(s) {
-    return (s || "")
-      .toString()
-      .trim()
-      .replace(/[^\w\-]+/g, "_")
-      .slice(0, 60);
-  }
+        const response = await fetch("/api/sendmail", {
+          method: "POST",
+          body: formData
+        });
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    btn.disabled = true;
-    msg.textContent = "Préparation du dossier…";
-
-    try {
-      // ✅ Mets ici TON lien "Demande de fichiers"
-      const FILE_REQUEST_URL = "https://groupebernier.sharepoint.com/sites/plqautresmarques/Documents%20partages/Forms/AllItems.aspx?id=%2Fsites%2Fplqautresmarques%2FDocuments%20partages%2FPARTAGE%20PLAQUE%2F03%20%2D%20APV%20ET%20PR%2F02%20%2D%20DOCUMENTS%20APV%20GROUPE%2F%2D%2006%20COMMUN%2FOnboarding&viewid=30bff939%2Db0ac%2D43b6%2D90a0%2D405d062045f5&FolderCTID=0x012000B772FC0096AEE447B119BF742707528E";
-
-      // 1) Récupération champs
-      const payload = {
-  nom: form.elements["nom"].value.trim(),
-  email: form.elements["email"].value.trim(),
-  telephone: form.elements["telephone"].value.trim(),
-  adresse_postale: form.elements["adresse_postale"].value.trim(),
-  immatriculation: form.elements["immatriculation"].value.trim(),
-  submittedAt: new Date().toISOString()
-};
-      // 2) Prépare ZIP
-      const zip = new JSZip();
-      zip.file("recap.json", JSON.stringify(payload, null, 2));
-
-      // 3) Ajoute les fichiers (carte grise + dégâts)
-      const fileInputs = Array.from(form.querySelectorAll('input[type="file"]'));
-      let added = 0;
-
-      for (const input of fileInputs) {
-        if (!input.files || input.files.length === 0) continue;
-        const file = input.files[0];
-
-        // limite simple (ex: 8 Mo)
-        const maxBytes = 8 * 1024 * 1024;
-        if (file.size > maxBytes) {
-          throw new Error(`Le fichier "${file.name}" est trop lourd (max 8 Mo).`);
+        if (!response.ok) {
+          const txt = await response.text().catch(() => "");
+          throw new Error(txt || "Erreur lors de l’envoi du dossier.");
         }
 
-        const ab = await fileToArrayBuffer(file);
-        const folder = input.name === "carte_grise" ? "carte_grise" : "degats";
-        zip.file(`${folder}/${input.name}_${safe(file.name)}`, ab);
-        added++;
+        window.location.href = "/merci.html";
+
+      } catch (err) {
+        btn.disabled = false;
+        msg.textContent = "Erreur : " + err.message;
       }
-
-      if (added === 0) {
-        throw new Error("Aucun fichier ajouté. Merci d’ajouter au minimum la carte grise.");
-      }
-
-      msg.textContent = "Génération du ZIP…";
-
-      // 4) Génère le ZIP
-      const blob = await zip.generateAsync({ type: "blob" });
-
-      const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
-      const zipName = `Onboarding_${stamp}_${safe(payload.nom)}_${safe(payload.immatriculation || "immat_inconnue")}.zip`;
-
-      // 5) Télécharge le ZIP
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = zipName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(a.href);
-
-      // 6) Ouvre la page d’upload (file request)
-      msg.textContent = "ZIP prêt ✅. Une page s’ouvre pour déposer le fichier.";
-      window.open(FILE_REQUEST_URL, "_blank");
-setTimeout(() => window.location.href = "/merci.html", 800);
-
-      // Option : redirection vers merci
-      window.location.href = "/merci.html";
-
-    } catch (err) {
-      btn.disabled = false;
-      msg.textContent = "Erreur : " + err.message;
-    }
-  });
-</script>
-
-
+    });
+  </script>
 
 </body>
 </html>
