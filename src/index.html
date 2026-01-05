@@ -176,38 +176,90 @@
   </div>
 
   <!-- JS ENVOI VERS AZURE FUNCTION -->
-  <script>
-    const form = document.getElementById("onboardingForm");
-    const btn = document.getElementById("btn");
-    const msg = document.getElementById("msg");
+ <script>
+  const form = document.getElementById("onboardingForm");
+  const btn = document.getElementById("btn");
+  const msg = document.getElementById("msg");
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      btn.disabled = true;
-      msg.textContent = "Envoi en cours… merci de patienter.";
-
-      try {
-        const formData = new FormData(form);
-
-        const response = await fetch("/api/upload", {
-          method: "POST",
-          body: formData
-        });
-
-if (!response.ok) {
-  const txt = await response.text().catch(() => "");
-  throw new Error(`HTTP ${response.status} - ${txt || "Erreur serveur"}`);
-}
-
-
-        window.location.href = "/merci.html";
-
-      } catch (err) {
-        btn.disabled = false;
-        msg.textContent = "Erreur : " + err.message;
-      }
+  // Convertit un fichier en base64 (sans le prefixe data:...;base64,)
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result || "";
+        const base64 = String(result).split(",")[1] || "";
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
     });
-  </script>
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    btn.disabled = true;
+    msg.textContent = "Envoi en cours… merci de patienter.";
+
+    try {
+      // ✅ Ton URL Power Automate (trigger HTTP)
+      const FLOW_URL = "https://defaultea92096a96c14efb9a8635d47955b0.05.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/355aec3f35864210846b798fa9db1bb0/triggers/manual/paths/invoke?api-version=1";
+
+      // 1) champs texte
+      const payload = {
+        nom: form.nom.value.trim(),
+        email: form.email.value.trim(),
+        telephone: form.telephone.value.trim(),
+        adresse_postale: form.adresse_postale.value.trim(),
+        immatriculation: form.immatriculation.value.trim(),
+        submittedAt: new Date().toISOString(),
+        files: []
+      };
+
+      // 2) fichiers (carte grise + dégâts)
+      const fileInputs = Array.from(form.querySelectorAll('input[type="file"]'));
+
+      for (const input of fileInputs) {
+        if (!input.files || input.files.length === 0) continue;
+        const file = input.files[0];
+
+        // sécurité simple : limite 7 Mo par photo (à ajuster)
+        const maxBytes = 7 * 1024 * 1024;
+        if (file.size > maxBytes) {
+          throw new Error(`Le fichier "${file.name}" est trop lourd (max 7 Mo).`);
+        }
+
+        const base64 = await fileToBase64(file);
+
+        payload.files.push({
+          field: input.name,             // ex: "carte_grise", "degat_1"...
+          name: file.name,
+          contentType: file.type || "application/octet-stream",
+          dataBase64: base64
+        });
+      }
+
+      // 3) appel du Flow
+      const response = await fetch(FLOW_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const txt = await response.text().catch(() => "");
+        throw new Error(`Erreur Flow HTTP ${response.status} - ${txt || "Réponse vide"}`);
+      }
+
+      // OK
+      window.location.href = "/merci.html";
+
+    } catch (err) {
+      btn.disabled = false;
+      msg.textContent = "Erreur : " + err.message;
+    }
+  });
+</script>
+
 
 </body>
 </html>
