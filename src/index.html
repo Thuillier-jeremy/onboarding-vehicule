@@ -175,82 +175,102 @@
 
   </div>
 
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
   <!-- JS ENVOI VERS AZURE FUNCTION -->
  <script>
   const form = document.getElementById("onboardingForm");
   const btn = document.getElementById("btn");
   const msg = document.getElementById("msg");
 
-  // Convertit un fichier en base64 (sans le prefixe data:...;base64,)
-  function fileToBase64(file) {
+  // 🔁 Convertit un File en ArrayBuffer (pour ZIP)
+  function fileToArrayBuffer(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result || "";
-        const base64 = String(result).split(",")[1] || "";
-        resolve(base64);
-      };
+      reader.onload = () => resolve(reader.result);
       reader.onerror = reject;
-      reader.readAsDataURL(file);
+      reader.readAsArrayBuffer(file);
     });
+  }
+
+  // Nettoyage léger pour nom de fichier
+  function safe(s) {
+    return (s || "")
+      .toString()
+      .trim()
+      .replace(/[^\w\-]+/g, "_")
+      .slice(0, 60);
   }
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     btn.disabled = true;
-    msg.textContent = "Envoi en cours… merci de patienter.";
+    msg.textContent = "Préparation du dossier…";
 
     try {
-      // ✅ Ton URL Power Automate (trigger HTTP)
-      const FLOW_URL = "https://defaultea92096a96c14efb9a8635d47955b0.05.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/355aec3f35864210846b798fa9db1bb0/triggers/manual/paths/invoke?api-version=1";
+      // ✅ Mets ici TON lien "Demande de fichiers"
+      const FILE_REQUEST_URL = "https://groupebernier.sharepoint.com/sites/plqautresmarques/Documents%20partages/Forms/AllItems.aspx?id=%2Fsites%2Fplqautresmarques%2FDocuments%20partages%2FPARTAGE%20PLAQUE%2F03%20%2D%20APV%20ET%20PR%2F02%20%2D%20DOCUMENTS%20APV%20GROUPE%2F%2D%2006%20COMMUN%2FOnboarding&viewid=30bff939%2Db0ac%2D43b6%2D90a0%2D405d062045f5&FolderCTID=0x012000B772FC0096AEE447B119BF742707528E";
 
-      // 1) champs texte
+      // 1) Récupération champs
       const payload = {
-        nom: form.nom.value.trim(),
-        email: form.email.value.trim(),
-        telephone: form.telephone.value.trim(),
-        adresse_postale: form.adresse_postale.value.trim(),
-        immatriculation: form.immatriculation.value.trim(),
-        submittedAt: new Date().toISOString(),
-        files: []
-      };
+  nom: form.elements["nom"].value.trim(),
+  email: form.elements["email"].value.trim(),
+  telephone: form.elements["telephone"].value.trim(),
+  adresse_postale: form.elements["adresse_postale"].value.trim(),
+  immatriculation: form.elements["immatriculation"].value.trim(),
+  submittedAt: new Date().toISOString()
+};
+      // 2) Prépare ZIP
+      const zip = new JSZip();
+      zip.file("recap.json", JSON.stringify(payload, null, 2));
 
-      // 2) fichiers (carte grise + dégâts)
+      // 3) Ajoute les fichiers (carte grise + dégâts)
       const fileInputs = Array.from(form.querySelectorAll('input[type="file"]'));
+      let added = 0;
 
       for (const input of fileInputs) {
         if (!input.files || input.files.length === 0) continue;
         const file = input.files[0];
 
-        // sécurité simple : limite 7 Mo par photo (à ajuster)
-        const maxBytes = 7 * 1024 * 1024;
+        // limite simple (ex: 8 Mo)
+        const maxBytes = 8 * 1024 * 1024;
         if (file.size > maxBytes) {
-          throw new Error(`Le fichier "${file.name}" est trop lourd (max 7 Mo).`);
+          throw new Error(`Le fichier "${file.name}" est trop lourd (max 8 Mo).`);
         }
 
-        const base64 = await fileToBase64(file);
-
-        payload.files.push({
-          field: input.name,             // ex: "carte_grise", "degat_1"...
-          name: file.name,
-          contentType: file.type || "application/octet-stream",
-          dataBase64: base64
-        });
+        const ab = await fileToArrayBuffer(file);
+        const folder = input.name === "carte_grise" ? "carte_grise" : "degats";
+        zip.file(`${folder}/${input.name}_${safe(file.name)}`, ab);
+        added++;
       }
 
-      // 3) appel du Flow
-      const response = await fetch(FLOW_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        const txt = await response.text().catch(() => "");
-        throw new Error(`Erreur Flow HTTP ${response.status} - ${txt || "Réponse vide"}`);
+      if (added === 0) {
+        throw new Error("Aucun fichier ajouté. Merci d’ajouter au minimum la carte grise.");
       }
 
-      // OK
+      msg.textContent = "Génération du ZIP…";
+
+      // 4) Génère le ZIP
+      const blob = await zip.generateAsync({ type: "blob" });
+
+      const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
+      const zipName = `Onboarding_${stamp}_${safe(payload.nom)}_${safe(payload.immatriculation || "immat_inconnue")}.zip`;
+
+      // 5) Télécharge le ZIP
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = zipName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+
+      // 6) Ouvre la page d’upload (file request)
+      msg.textContent = "ZIP prêt ✅. Une page s’ouvre pour déposer le fichier.";
+      window.open(FILE_REQUEST_URL, "_blank");
+setTimeout(() => window.location.href = "/merci.html", 800);
+
+      // Option : redirection vers merci
       window.location.href = "/merci.html";
 
     } catch (err) {
@@ -259,6 +279,7 @@
     }
   });
 </script>
+
 
 
 </body>
